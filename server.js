@@ -42,7 +42,7 @@ app.post('/upload', upload.single('image'), async (req, res) => {
             .jpeg({ quality })
             .toFile(filePath);
 
-        res.json({ url: 'http://localhost:5000/download' });
+        res.json({ url: 'https://photo-resizer-backend1.onrender.com/download' });
     } catch (error) {
         console.error('Error processing image:', error);
         res.status(500).json({ error: 'Error processing image' });
