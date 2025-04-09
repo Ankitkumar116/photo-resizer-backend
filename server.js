@@ -53,38 +53,58 @@ const deleteOldFiles = () => {
 // 🔁 Resize and Compress Endpoint
 app.post('/upload', upload.single('image'), async (req, res) => {
   try {
-    const { width, height, unit, quality } = req.body;
+    let { width, height, unit, quality } = req.body;
 
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded.' });
+    if (!width || !height || !unit || !quality || !req.file) {
+      return res.status(400).json({ error: 'Missing required fields or image' });
     }
 
-    const numericWidth = parseFloat(width);
-    const numericHeight = parseFloat(height);
-    const conversionFactors = { cm: 37.7953, inch: 96, px: 1 };
-    const qualityPresets = { low: 50, medium: 90, high: 99 };
-
-    if (!conversionFactors[unit] || !qualityPresets[quality]) {
-      return res.status(400).json({ error: 'Invalid unit or quality.' });
+    const factor = conversionFactors[unit];
+    if (!factor) {
+      return res.status(400).json({ error: 'Invalid unit' });
     }
 
-    const pixelWidth = Math.round(numericWidth * conversionFactors[unit]);
-    const pixelHeight = Math.round(numericHeight * conversionFactors[unit]);
+    width = parseFloat(width);
+    height = parseFloat(height);
 
-    const outputFile = `uploads/resized_${Date.now()}.jpg`;
+    if (isNaN(width) || isNaN(height)) {
+      return res.status(400).json({ error: 'Invalid dimensions' });
+    }
+
+    const qualityPresets = {
+      low: 50,
+      medium: 90,
+      high: 99,
+    };
+
+    const jpegQuality = qualityPresets[quality];
+    if (!jpegQuality) {
+      return res.status(400).json({ error: 'Invalid quality setting' });
+    }
+
+    const pixelWidth = Math.round(width * factor);
+    const pixelHeight = Math.round(height * factor);
+
+    const uniqueId = uuidv4();
+    const filename = `output-${uniqueId}.jpg`;
+    const filePath = path.join(__dirname, 'public', filename);
 
     await sharp(req.file.buffer)
       .resize(pixelWidth, pixelHeight)
-      .jpeg({ quality: qualityPresets[quality] })
-      .toFile(outputFile);
+      .jpeg({ quality: jpegQuality })
+      .toFile(filePath);
 
-    const previewUrl = `${req.protocol}://${req.get('host')}/${outputFile}`;
-    res.json({ previewUrl, downloadUrl: previewUrl });
-  } catch (err) {
-    console.error('Resize error:', err); // ← log full error
-    res.status(500).json({ error: 'Server error during image processing.' });
+    const baseUrl = 'https://photo-resizer-backend1.onrender.com';
+    const previewUrl = `${baseUrl}/${filename}`;
+    const downloadUrl = `${baseUrl}/download/${filename}`;
+
+    res.json({ previewUrl, downloadUrl });
+  } catch (error) {
+    console.error('❌ Error processing image:', error.message);
+    res.status(500).json({ error: 'Error processing image' });
   }
 });
+
 
 
 // 📏 Real-time Size Estimation
