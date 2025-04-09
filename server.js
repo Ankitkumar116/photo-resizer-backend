@@ -22,9 +22,9 @@ const conversionFactors = {
 
 // Quality presets
 const qualityPresets = {
-  low: 40,
-  medium: 65,
-  high: 85
+  low: 50,
+  medium: 90,
+  high: 99
 };
 
 // 🔁 Resize and Compress Endpoint
