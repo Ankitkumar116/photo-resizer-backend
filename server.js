@@ -26,37 +26,66 @@ const qualityPresets = {
   medium: 90,
   high: 99
 };
+const deleteOldFiles = () => {
+  const directory = path.join(__dirname, 'public');
+  const timeLimit = 60 * 60 * 1000; // 1 hour in milliseconds
+
+  fs.readdir(directory, (err, files) => {
+    if (err) return console.error('Error reading directory:', err);
+
+    files.forEach((file) => {
+      const filePath = path.join(directory, file);
+      fs.stat(filePath, (err, stats) => {
+        if (err) return console.error('Error stating file:', err);
+
+        const now = Date.now();
+        if (now - stats.mtimeMs > timeLimit) {
+          fs.unlink(filePath, (err) => {
+            if (err) console.error('Failed to delete file:', err);
+            else console.log(`Deleted old file: ${file}`);
+          });
+        }
+      });
+    });
+  });
+};
 
 // 🔁 Resize and Compress Endpoint
 app.post('/upload', upload.single('image'), async (req, res) => {
   try {
-    let { width, height, unit, quality } = req.body;
+    const { width, height, unit, quality } = req.body;
 
-    const factor = conversionFactors[unit] || 37.7953;
-    const qualityVal = qualityPresets[quality] || 65;
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded.' });
+    }
 
-    width = parseFloat(width) * factor;
-    height = parseFloat(height) * factor;
+    const numericWidth = parseFloat(width);
+    const numericHeight = parseFloat(height);
+    const conversionFactors = { cm: 37.7953, inch: 96, px: 1 };
+    const qualityPresets = { low: 50, medium: 90, high: 99 };
 
-    const uniqueId = uuidv4();
-    const filename = `output-${uniqueId}.jpg`;
-    const filePath = path.join(__dirname, 'public', filename);
+    if (!conversionFactors[unit] || !qualityPresets[quality]) {
+      return res.status(400).json({ error: 'Invalid unit or quality.' });
+    }
+
+    const pixelWidth = Math.round(numericWidth * conversionFactors[unit]);
+    const pixelHeight = Math.round(numericHeight * conversionFactors[unit]);
+
+    const outputFile = `uploads/resized_${Date.now()}.jpg`;
 
     await sharp(req.file.buffer)
-      .resize(Math.round(width), Math.round(height))
-      .jpeg({ quality: qualityVal })
-      .toFile(filePath);
+      .resize(pixelWidth, pixelHeight)
+      .jpeg({ quality: qualityPresets[quality] })
+      .toFile(outputFile);
 
-    const baseUrl = 'https://photo-resizer-backend1.onrender.com';
-    const previewUrl = `${baseUrl}/${filename}`;
-    const downloadUrl = `${baseUrl}/download/${filename}`;
-
-    res.json({ previewUrl, downloadUrl });
-  } catch (error) {
-    console.error('Error processing image:', error);
-    res.status(500).json({ error: 'Error processing image' });
+    const previewUrl = `${req.protocol}://${req.get('host')}/${outputFile}`;
+    res.json({ previewUrl, downloadUrl: previewUrl });
+  } catch (err) {
+    console.error('Resize error:', err); // ← log full error
+    res.status(500).json({ error: 'Server error during image processing.' });
   }
 });
+
 
 // 📏 Real-time Size Estimation
 app.post('/estimate', upload.single('image'), async (req, res) => {
@@ -108,3 +137,6 @@ if (!fs.existsSync(publicDir)) {
 // 🚀 Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Auto-delete old files every 15 minutes
+setInterval(deleteOldFiles, 15 * 60 * 1000);
+
